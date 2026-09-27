@@ -1,4 +1,4 @@
-ESP32 Hybrid Robot Control Using Dabble and Ultrasonic Sensor — Lab 3
+# Lab 3: Hybrid Robot Control Using Dabble and Ultrasonic Sensor
 
 Course: ICT 361 Submission Type: Group
 Group Members
@@ -6,33 +6,76 @@ Group Members
 LY SOKPISEY
 LINH KIMSOURMANA
 
+## Overview
+This project implements a dual-mode hybrid control system for a 4-motor robotic vehicle using an **ESP32**, **Dabble Bluetooth App**, **Servo Motor**, and an **Ultrasonic Sensor**. The robot operates in two primary execution modes—**Manual Mode** and **Automatic Mode**—and remains safely in an **Idle State** upon initial system boot.
 
-Objective
+---
 
-This project implements a hybrid robot control system on an ESP32 development board. The robot can operate in two distinct modes: Manual Mode (remote control via the Dabble smartphone app over Bluetooth) and Automatic Mode (autonomous navigation using an ultrasonic sensor for obstacle avoidance). The robot remains idle at boot and requires explicit user input via the Dabble app to activate a mode. In Manual Mode, joystick commands control 4-wheel movement, while controller buttons adjust a front-mounted servo motor within a strict $30^\circ$ to $140^\circ$ range. In Automatic Mode, the robot navigates autonomously, automatically detecting obstacles within 20 cm and turning left in $90^\circ$ increments until a clear path is found.
+## System Architecture & Hardware Components
+* **Controller:** ESP32 Development Board
+* **Actuators:** Motor Driver (4 DC Motors), 1 Servo Motor
+* **Sensors:** Ultrasonic Sensor (HC-SR04, front-facing)
+* **Connectivity:** Bluetooth via Dabble Smartphone App
+* **Power:** External Battery Pack
 
+---
 
-Hardware Setup
+## Operational Logic & Software Design
 
-Input / Output | GPIO / Module | Function
---- | --- | ---
-Dabble App (Bluetooth) | ESP32 Bluetooth Module | Mode selection, movement joystick, servo button inputs
-Ultrasonic Sensor TRIG | GPIO 5 | Output trigger pin for distance measurement
-Ultrasonic Sensor ECHO | GPIO 18 | Input echo pin for distance measurement
-Servo Motor | GPIO 13 | Front-mounted position control signal
+### 1. System Initialization & Idle State
+Upon boot-up, the system initializes all hardware peripherals:
+* Digital I/O pins for the motor driver and ultrasonic sensor.
+* Servo attachment and Dabble Bluetooth protocol initialization via `Dabble.begin()`.
+* **Idle Safety Protocol:** The system defaults to `IDLE` mode. All motor outputs are set to LOW (stopped), and joystick inputs are ignored until a mode selection key (`SELECT` or `START`) is registered.
 
-Motor Driver Output | GPIO (Dir A / Dir B) | Motor
---- | --- | ---
-Left Motors (Channel A) | GPIO 16 / GPIO 17 | Motor 1 & Motor 2
-Right Motors (Channel B) | GPIO 18 / GPIO 19 | Motor 3 & Motor 4
+### 2. Mode Switching Logic
+The main execution loop continuously monitors incoming Dabble Bluetooth packets using `Dabble.processInput()`:
+* **`SELECT` Button:** Switches the robot into **Manual Mode**.
+* **`START` Button:** Switches the robot into **Automatic Mode**.
 
+---
 
-Control Logic Summary
+## Detailed Control Modes
 
-1. Startup Safety & Mode Selection: The robot initializes in an IDLE state with all motors stopped. Pressing the SELECT button on the Dabble GamePad activates Manual Mode, while pressing the START button activates Automatic Mode.
-2. Manual Directional Control: In Manual Mode, joystick directional inputs trigger 4-wheel motion (Up: Forward, Down: Backward, Left: Rotate Left, Right: Rotate Right). Releasing the controls stops all motors.
-3. Servo Limit Control: Servo angle is adjusted incrementally or via presets (+10° via Square, -10° via Circle, 30° via Cross, 140° via Triangle). All angles are strictly clamped between $30^\circ$ and $140^\circ$.
-4. Automatic Obstacle Avoidance: In Automatic Mode, joystick commands are ignored. An ultrasonic sensor periodically checks for obstacles. If an object is detected within 20 cm, the robot stops, rotates left by approximately $90^\circ$, and continues checking iteratively until a clear path is found before proceeding forward.
+### Manual Control Mode
+In Manual Mode, the robot provides real-time control over motor propulsion and servo positioning:
+
+* **Movement Control (Joystick):**
+  * **Up:** Drive Forward
+  * **Down:** Drive Backward
+  * **Left:** Rotate Left (In-place turn)
+  * **Right:** Rotate Right (In-place turn)
+
+* **Servo Angle Control:**
+  * **Square Button:** Increments servo angle by **+10°**.
+  * **Circle Button:** Decrements servo angle by **-10°**.
+  * **Cross Button:** Moves servo to fixed preset angle of **30°**.
+  * **Triangle Button:** Moves servo to fixed preset angle of **140°**.
+
+* **Angle Clamping & Safety Protection:**
+  To protect hardware from structural strain, all requested angles pass through a soft limit function:
+  $$\text{Angle} = \text{constrain}(\text{Angle}, 30, 140)$$
+  This guarantees the physical angle stays strictly within the **30° to 140°** boundary regardless of rapid or repeated button presses.
+
+---
+
+### Automatic Obstacle Avoidance Mode
+In Automatic Mode, joystick controls are bypassed, and the robot relies autonomously on real-time ultrasonic sensor feedback:
+
+1. **Distance Measurement:** The ultrasonic sensor emits acoustic pulses to calculate distance to target objects ahead in centimeters.
+2. **Threshold Verification:**
+   * **Path Clear ($\ge 20\text{ cm}$):** Robot continuously drives straight forward.
+   * **Obstacle Detected ($< 20\text{ cm}$):** The robot executes an avoidance maneuver:
+     1. Halts forward motion.
+     2. Rotates left by approximately **90°**.
+     3. Re-evaluates distance on the next loop cycle.
+3. **Continuous Re-evaluation Loop:** If an obstacle is still detected within $20\text{ cm}$ after turning, the robot turns left again in $\sim90^\circ$ increments until a clear path is registered, at which point forward movement resumes.
+
+---
+
+## Performance & Optimization Notes
+* **Non-Blocking Logic:** The program architecture minimizes long `delay()` statements within the main loop to ensure smooth Bluetooth polling and immediate reaction to sudden obstacles.
+* **State Isolation:** Mutual exclusion between states prevents conflicting motor commands during mode switches.
 
 
 Flowchart
@@ -42,19 +85,4 @@ Flowchart
 
 
 Demo Video
-[![Watch Demonstration Video](https://img.youtube.com/vi/YOUR_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID_HERE)
-
-
-Explanation
-
-1. Purpose of Hybrid System Architecture and State Machine
-
-Real-world mobile robotics rarely relies on purely manual or purely autonomous control; instead, modern systems integrate both so humans can remotely intervene when needed while allowing autonomous algorithms to take over routine navigation tasks. In this project, state machine logic (`IDLE`, `MANUAL`, `AUTOMATIC`) decouples control modes cleanly. Operating inside a single continuous loop, the ESP32 handles inputs without long blocking delays, ensuring that pressing the SELECT or START button immediately switches the operating mode without needing a system reset or causing unpredictable motor behavior. The initial `IDLE` state serves as a safety feature to ensure the robot never moves immediately upon power-up until explicit user command is confirmed.
-
-2. Servo Angle Constraining and Incremental Control
-
-Servo motors attached to mechanical linkages or steering mechanisms must be protected from over-rotation, which can cause physical binding, gear stripping, or high electrical current draw. The control software enforces strict soft limits using `constrain(angle, 30, 140)`, guaranteeing that no matter how many times incremental step buttons (Square for $+10^\circ$, Circle for $-10^\circ$) or preset positioning buttons (Cross for $30^\circ$, Triangle for $140^\circ$) are pressed, the target position never violates the $30^\circ$ to $140^\circ$ structural boundaries. Incorporating small non-blocking debounce delays prevents single button taps from rapidly cascading into multiple unwanted step increments.
-
-3. Obstacle Avoidance Logic and Non-Blocking Timing
-
-Autonomous navigation relies on a continuous distance-sensing loop using the front-mounted ultrasonic sensor. Using non-blocking `millis()` timing checks rather than continuous heavy delay cycles allows the sensor to measure clearance without freezing the controller's main processing loop. When an obstacle drops below the 20 cm safety threshold, the state logic halts forward driving immediately to prevent collision, executes a timed differential turn left of approximately $90^\circ$, and pauses briefly for distance stabilization. If the new path remains blocked, the robot executes another $90^\circ$ left increment, repeating this process iteratively until a clear heading is determined.
+[![Watch Demonstration Video](https://[img.youtube.com/vi/YOUR_VIDEO_ID_HERE/0.jpg](https://drive.google.com/file/d/1XPZKZyRJcN9jO48Y0igzZ3v8CPvSvFVp/view?usp=sharing))]([https://www.youtube.com/watch?v=YOUR_VIDEO_ID_HERE](https://drive.google.com/file/d/1XPZKZyRJcN9jO48Y0igzZ3v8CPvSvFVp/view?usp=sharing))
