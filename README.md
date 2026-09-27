@@ -37,6 +37,8 @@ Control Logic Summary
 
 Flowchart
 
+<img width="815" height="1071" alt="ESP32-Hybrid-Robot-Lab3" src="https://github.com/user-attachments/assets/40eaeab7-0181-48bd-baed-6a604d985a78" />
+
 
 
 Demo Video
